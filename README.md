@@ -2,6 +2,40 @@
 
 Удобный лаунчер для хостинга и подключения к мультиплеерной игре Kenshi (Steam, версия 1.0.68+) через **Radmin VPN**.
 
+[Скачать Visual Studio 2022 Build Tools](https://aka.ms/vs/17/release/vs_buildtools.exe) · [Скачать CMake](https://github.com/Kitware/CMake/releases/download/v3.30.0/cmake-3.30.0-windows-x86_64.msi) · [Скачать Radmin VPN](https://www.radmin-vpn.com/download/)
+
+---
+
+## Быстрый старт
+
+### Установка инструментов (один раз)
+
+Скачайте и запустите (от имени администратора PowerShell):
+
+| Инструмент | Ссылка | Размер |
+|-----------|--------|--------|
+| **Visual Studio 2022 Build Tools** | [vs_buildtools.exe](https://aka.ms/vs/17/release/vs_buildtools.exe) | ~3 ГБ |
+| **CMake 3.30** | [cmake-3.30.0.msi](https://github.com/Kitware/CMake/releases/download/v3.30.0/cmake-3.30.0-windows-x86_64.msi) | ~30 МБ |
+
+Или автоматически (PowerShell от администратора):
+```powershell
+cd "C:\Users\argus\Desktop\KenshiNetworkLauncher\scripts"
+.\install-toolchain.ps1
+```
+
+### Сборка проекта
+
+```powershell
+cd "C:\Users\argus\Desktop\KenshiNetworkLauncher"
+.\build.ps1
+```
+
+Готовые .exe появятся в:
+- `build\HostLauncher\Release\KenshiLauncher.Host.exe`
+- `build\ClientLauncher\Release\KenshiLauncher.Client.exe`
+
+---
+
 ## Что это
 
 Два .exe файла:
@@ -10,88 +44,91 @@
 
 Внутри используется проект [Kenshi-Online](https://github.com/The404Studios/Kenshi-Online) — open-source мультиплеерный мод для Kenshi.
 
-## Требования
-
-- Windows 10/11 (x64)
-- Steam версия Kenshi 1.0.68+
-- [Radmin VPN](https://www.radmin-vpn.com/) — для создания локальной сети между игроками
+---
 
 ## Как играть
 
 ### Шаг 1 — Настройка Radmin VPN
 
-1. Скачайте и установите [Radmin VPN](https://www.radmin-vpn.com/)
+1. Скачайте [Radmin VPN](https://www.radmin-vpn.com/) и установите
 2. Создайте сеть (или присоединитесь к существующей)
 3. Добавьте всех игроков в одну сеть
 
 ### Шаг 2 — Хост (создатель мира)
 
-1. Скачайте `KenshiLauncher.Host.exe` из [Releases](../../releases)
-2. Запустите от имени администратора
-3. Нажмите **"Установить мод"** — лаунчер автоматически скачает Kenshi-Online
-4. Настройте сервер: имя, порт, макс. игроков (до 5), PvP
-5. Нажмите **"Запустить сервер"**
-6. Скопируйте IP:Port (кнопка "Копировать IP") и отправьте друзьям
+1. Запустите `KenshiLauncher.Host.exe`
+2. Нажмите **"Установить мод"** — лаунчер автоматически скачает Kenshi-Online с GitHub
+3. Настройте сервер: имя, порт (default 27800), макс. игроков (до 5), PvP
+4. Нажмите **"Запустить сервер"**
+5. Скопируйте IP:Port (кнопка "Копировать IP") и отправьте друзьям
 
 ### Шаг 3 — Клиенты (остальные игроки)
 
-1. Скачайте `KenshiLauncher.Client.exe` из [Releases](../../releases)
-2. Запустите, нажмите **"Установить мод"**
+1. Запустите `KenshiLauncher.Client.exe`
+2. Нажмите **"Установить мод"**
 3. Введите своё имя игрока
-4. Введите IP:Port от хоста (полученный на шаге 2)
+4. Введите IP:Port от хоста
 5. Нажмите **"Играть"**
-6. В главном меню Kenshi нажмите **MULTIPLAYER** или кнопку **\`** (Ё) для внутриигрового меню подключения
+6. В главном меню Kenshi нажмите **MULTIPLAYER** или кнопку **`** (Ё) для внутриигрового меню подключения
 
 ### Управление в игре
 
 | Клавиша | Действие |
 |---------|---------|
-| \` (Ё/тильда) | Открыть меню мультиплеера |
+| **`** (Ё/тильда) | Открыть меню мультиплеера |
 | F1 | Переключить HUD |
 | Enter | Чат |
 | Tab | Список игроков |
 
-## Сборка из исходников
+---
 
-### Требования
+## Требования
 
-- Windows 10/11 (x64)
-- Visual Studio 2022 с C++ Desktop workload
-- CMake 3.20+
+| Компонент | Версия |
+|-----------|--------|
+| ОС | Windows 10/11 (x64) |
+| Игра | Kenshi 1.0.68+ (Steam) |
+| Сеть | Radmin VPN (подсети 100.x.x.x / 10.x.x.x) |
+| Макс. игроков | 5 (настраивается) |
+| Порт по умолчанию | 27800 UDP |
 
-### Команды
-
-```powershell
-# Клонировать
-git clone --recursive https://github.com/YOUR_USER/KenshiNetworkLauncher.git
-cd KenshiNetworkLauncher
-
-# Сборка
-cmake -G "Visual Studio 17 2022" -A x64 -S . -B build
-cmake --build build --config Release
-
-# Результат в
-# build\HostLauncher\Release\KenshiLauncher.Host.exe
-# build\ClientLauncher\Release\KenshiLauncher.Client.exe
-```
+---
 
 ## Структура проекта
 
 ```
+scripts/
+  install-toolchain.ps1   — автоустановка VS + CMake
+build.ps1                 — сборка проекта (запуск через .\build.ps1)
+
 src/
-  LauncherCommon/   — общий код (поиск игры, скачивание, деплой)
-  HostLauncher/      — exe хоста
-  ClientLauncher/    — exe клиента
+  LauncherCommon/         — общий код
+    SteamPath.cpp         — поиск Kenshi через Steam Registry
+    GitHubReleases.cpp    — скачивание Kenshi-Online с GitHub
+    ModDeployer.cpp       — установка модов, патч Plugins_x64.cfg
+    NetworkUtils.cpp       — определение IP (Radmin VPN)
+  HostLauncher/           — KenshiLauncher.Host.exe
+  ClientLauncher/         — KenshiLauncher.Client.exe
 ```
 
-## Совместимость
+---
 
-| Компонент | Версия |
-|-----------|--------|
-| Игра | Kenshi 1.0.68 (Steam) |
-| Сеть | Radmin VPN (подсети 100.x.x.x / 10.x.x.x) |
-| Макс. игроков | 5 (настраивается) |
-| Порт по умолчанию | 27800 UDP |
+## Сборка вручную
+
+```powershell
+# Клонировать
+git clone https://github.com/KavaMan1337/KenshiNetworkLauncher.git
+cd KenshiNetworkLauncher
+
+# Сборка (через скрипт)
+.\build.ps1
+
+# Или вручную через cmake
+cmake -G "Visual Studio 17 2022" -A x64 -S . -B build
+cmake --build build --config Release
+```
+
+---
 
 ## Лицензия
 
