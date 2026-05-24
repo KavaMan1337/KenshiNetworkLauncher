@@ -42,7 +42,11 @@ static std::wstring WideUrl(const std::string& s) {
 }
 
 static std::string NarrowUrl(const wchar_t* s) {
-    return std::string(s, s + wcslen(s));
+    int len = (int)wcslen(s);
+    std::string result;
+    result.reserve((size_t)len);
+    for (int i = 0; i < len; i++) result.push_back((char)s[i]);
+    return result;
 }
 
 } // anonymous namespace

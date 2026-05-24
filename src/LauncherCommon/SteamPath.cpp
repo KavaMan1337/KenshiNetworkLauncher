@@ -3,7 +3,8 @@
 #include <shlwapi.h>
 #include <string>
 #include <vector>
-#include <fstream>
+#include <cstdio>
+#include <cstdlib>
 #include <algorithm>
 
 #pragma comment(lib, "shlwapi.lib")
@@ -27,8 +28,24 @@ static std::wstring ReadRegValue(HKEY root, const wchar_t* subkey, const wchar_t
     return std::wstring(buf);
 }
 
+// Read entire file into string (ASCII/VDF format)
+static bool ReadFileToString(const wchar_t* path, std::string& out) {
+    FILE* f = _wfopen(path, L"rb");
+    if (!f) return false;
+
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    out.resize((size_t)len);
+    size_t read = fread(out.data(), 1, (size_t)len, f);
+    fclose(f);
+    out.resize(read);
+    return true;
+}
+
 // Parse VDF key: "key" "value" format
-static std::string VDFGetStrA(const char* line, const char* key) {
+static std::string VDFGetStr(const char* line, const char* key) {
     const char* p = strstr(line, key);
     if (!p) return "";
     p += strlen(key);
@@ -42,43 +59,40 @@ static std::string VDFGetStrA(const char* line, const char* key) {
 
 static std::wstring FindKenshiInLibrary(const std::string& steamPath) {
     std::string vdfPath = steamPath + "\\steamapps\\libraryfolders.vdf";
-    FILE* f = _wfopen(std::wstring(vdfPath.begin(), vdfPath.end()).c_str(), L"r, ccs=UTF-8");
-    if (!f) return L"";
+    std::string content;
+    if (!ReadFileToString(std::wstring(vdfPath.begin(), vdfPath.end()).c_str(), content))
+        return L"";
 
-    std::string curLine;
     std::string curPath;
-    bool found = false;
+    std::string::size_type pos = 0;
 
-    while (std::getline(f, curLine)) {
-        if (!curLine.empty() && curLine.back() == '\r')
-            curLine.pop_back();
+    while (pos < content.size()) {
+        std::string::size_type lineEnd = content.find('\n', pos);
+        if (lineEnd == std::string::npos) lineEnd = content.size();
+        std::string line = content.substr(pos, lineEnd - pos);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
 
-        std::string pathVal = VDFGetStrA(curLine.c_str(), "\"path\"");
+        std::string pathVal = VDFGetStr(line.c_str(), "\"path\"");
         if (!pathVal.empty()) {
             curPath = pathVal;
             std::replace(curPath.begin(), curPath.end(), '/', '\\');
         }
 
-        std::string appsVal = VDFGetStrA(curLine.c_str(), "\"apps\"");
+        std::string appsVal = VDFGetStr(line.c_str(), "\"apps\"");
         if (!appsVal.empty() && appsVal.find("233860") != std::string::npos) {
-            std::wstring result = std::wstring(curPath.begin(), curPath.end()) + L"\\steamapps\\common\\Kenshi";
-            fclose(f);
-
-            // Verify kenshi_x64.exe exists
+            std::wstring result = std::wstring(curPath.begin(), curPath.end())
+                + L"\\steamapps\\common\\Kenshi";
             FILE* verify = _wfopen((result + L"\\kenshi_x64.exe").c_str(), L"rb");
             if (verify) { fclose(verify); return result; }
-            return L"";
         }
-    }
-    fclose(f);
 
-    // Check default path
+        pos = lineEnd + 1;
+    }
+
+    // Default path
     std::string defPath = steamPath + "\\steamapps\\common\\Kenshi";
     FILE* verify = _wfopen(std::wstring(defPath.begin(), defPath.end()).c_str(), L"rb");
-    if (verify) {
-        fclose(verify);
-        return std::wstring(defPath.begin(), defPath.end());
-    }
+    if (verify) { fclose(verify); return std::wstring(defPath.begin(), defPath.end()); }
 
     return L"";
 }
@@ -91,13 +105,9 @@ std::wstring FindKenshiPath() {
         L"InstallPath"
     );
     if (!steamPath.empty()) {
-        std::wstring kenshi = FindKenshiInLibrary(std::string(steamPath.begin(), steamPath.end()));
+        std::wstring kenshi = FindKenshiInLibrary(
+            std::string(steamPath.begin(), steamPath.end()));
         if (!kenshi.empty()) return kenshi;
-
-        // Default path fallback
-        std::wstring def = steamPath + L"\\steamapps\\common\\Kenshi";
-        FILE* verify = _wfopen((def + L"\\kenshi_x64.exe").c_str(), L"rb");
-        if (verify) { fclose(verify); return def; }
     }
 
     // Try 32-bit registry
@@ -107,18 +117,20 @@ std::wstring FindKenshiPath() {
         L"InstallPath"
     );
     if (!steamPath32.empty()) {
-        std::wstring kenshi = FindKenshiInLibrary(std::string(steamPath32.begin(), steamPath32.end()));
+        std::wstring kenshi = FindKenshiInLibrary(
+            std::string(steamPath32.begin(), steamPath32.end()));
         if (!kenshi.empty()) return kenshi;
     }
 
-    // Try user registry (HKEY_CURRENT_USER has lower priority)
+    // Try user registry
     std::wstring userSteam = ReadRegValue(
         HKEY_CURRENT_USER,
         L"SOFTWARE\\Valve\\Steam",
         L"SteamPath"
     );
     if (!userSteam.empty()) {
-        std::wstring kenshi = FindKenshiInLibrary(std::string(userSteam.begin(), userSteam.end()));
+        std::wstring kenshi = FindKenshiInLibrary(
+            std::string(userSteam.begin(), userSteam.end()));
         if (!kenshi.empty()) return kenshi;
     }
 
