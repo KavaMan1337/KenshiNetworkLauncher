@@ -6,11 +6,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8 /EHsc>)
+add_compile_options($<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra>)
 
 find_package(OpenSSL QUIET)
 
 # Windows SDK libs
-set(WINDOWS_LIBS winhttp shlwapi comctl32 ole32 oleaut32 uuid iphlpapi ws2_32)
+if(MSVC)
+    set(WINDOWS_LIBS winhttp shlwapi comctl32 ole32 oleaut32 uuid iphlpapi ws2_32)
+else()
+    set(WINDOWS_LIBS winhttp shlwapi comctl32 ole32 oleaut32 uuid iphlpapi ws2_32)
+endif()
 
 # LauncherCommon: static lib with shared code
 add_subdirectory(src/LauncherCommon)

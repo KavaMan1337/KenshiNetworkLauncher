@@ -3,9 +3,8 @@
 #include <shlwapi.h>
 #include <string>
 #include <vector>
-#include <cstdio>
 #include <fstream>
-#include <sstream>
+#include <algorithm>
 
 #pragma comment(lib, "shlwapi.lib")
 
@@ -28,92 +27,99 @@ static std::wstring ReadRegValue(HKEY root, const wchar_t* subkey, const wchar_t
     return std::wstring(buf);
 }
 
-// Извлекает значение из строки VDF (кавычки не учитываются)
-static std::wstring VDFGetStr(const wchar_t* line, const wchar_t* key) {
-    const wchar_t* p = wcsstr(line, key);
-    if (!p) return L"";
-    p += wcslen(key);
-    // Пропуск пробелов
-    while (*p == L' ' || *p == L'\t') ++p;
-    if (*p != L'"') return L"";
+// Parse VDF key: "key" "value" format
+static std::string VDFGetStrA(const char* line, const char* key) {
+    const char* p = strstr(line, key);
+    if (!p) return "";
+    p += strlen(key);
+    while (*p == ' ' || *p == '\t') ++p;
+    if (*p != '"') return "";
     ++p;
-    const wchar_t* end = p;
-    while (*end && *end != L'"') ++end;
-    return std::wstring(p, end - p);
+    const char* end = p;
+    while (*end && *end != '"') ++end;
+    return std::string(p, end - p);
 }
 
-// Ищет app_id 233860 (Kenshi) в libraryfolders.vdf
-static std::wstring FindKenshiInLibrary(const std::wstring& steamPath) {
-    std::wstring vdfPath = steamPath + L"\\steamapps\\libraryfolders.vdf";
-    if (!PathFileExistsW(vdfPath.c_str())) return L"";
-
-    std::ifstream f(vdfPath);
+static std::wstring FindKenshiInLibrary(const std::string& steamPath) {
+    std::string vdfPath = steamPath + "\\steamapps\\libraryfolders.vdf";
+    FILE* f = _wfopen(std::wstring(vdfPath.begin(), vdfPath.end()).c_str(), L"r, ccs=UTF-8");
     if (!f) return L"";
 
-    std::wstring curLine;
-    std::wstring curPath;
-    bool inLibrary = false;
+    std::string curLine;
+    std::string curPath;
+    bool found = false;
 
     while (std::getline(f, curLine)) {
-        // Удаляем \r в конце строки (Windows)
-        if (!curLine.empty() && curLine.back() == L'\r')
+        if (!curLine.empty() && curLine.back() == '\r')
             curLine.pop_back();
 
-        if (curLine.find(L'"') != std::wstring::npos) {
-            std::wstring token = curLine;
-            token.erase(std::remove_if(token.begin(), token.end(),
-                [](wchar_t c) { return c == L'\t' || c == L' ' || c == L'\r' || c == L'\n'; }),
-                token.end());
+        std::string pathVal = VDFGetStrA(curLine.c_str(), "\"path\"");
+        if (!pathVal.empty()) {
+            curPath = pathVal;
+            std::replace(curPath.begin(), curPath.end(), '/', '\\');
+        }
 
-            if (VDFGetStr(token.c_str(), L"\"path\"").size() > 0) {
-                curPath = VDFGetStr(token.c_str(), L"\"path\"");
-                // Заменяем слэши
-                for (auto& c : curPath) if (c == L'\\') c = L'/';
-            }
+        std::string appsVal = VDFGetStrA(curLine.c_str(), "\"apps\"");
+        if (!appsVal.empty() && appsVal.find("233860") != std::string::npos) {
+            std::wstring result = std::wstring(curPath.begin(), curPath.end()) + L"\\steamapps\\common\\Kenshi";
+            fclose(f);
 
-            std::wstring apps = VDFGetStr(token.c_str(), L"\"apps\"");
-            if (!apps.empty() && apps.find(L"233860") != std::wstring::npos) {
-                std::wstring result = curPath + L"/steamapps/common/Kenshi";
-                for (auto& c : result) if (c == L'/') c = L'\\';
-                return result;
-            }
+            // Verify kenshi_x64.exe exists
+            FILE* verify = _wfopen((result + L"\\kenshi_x64.exe").c_str(), L"rb");
+            if (verify) { fclose(verify); return result; }
+            return L"";
         }
     }
+    fclose(f);
 
-    // Последний library — Steam itself
-    std::wstring manifestPath = steamPath + L"\\steamapps\\common\\Kenshi";
-    if (PathFileExistsW((manifestPath + L"\\kenshi_x64.exe").c_str()))
-        return manifestPath;
+    // Check default path
+    std::string defPath = steamPath + "\\steamapps\\common\\Kenshi";
+    FILE* verify = _wfopen(std::wstring(defPath.begin(), defPath.end()).c_str(), L"rb");
+    if (verify) {
+        fclose(verify);
+        return std::wstring(defPath.begin(), defPath.end());
+    }
 
     return L"";
 }
 
 std::wstring FindKenshiPath() {
-    // 1. Пробуем через Steam Registry
+    // Try Steam Registry (64-bit)
     std::wstring steamPath = ReadRegValue(
         HKEY_LOCAL_MACHINE,
         L"SOFTWARE\\WOW6432Node\\Valve\\Steam",
         L"InstallPath"
     );
     if (!steamPath.empty()) {
-        std::wstring kenshiPath = FindKenshiInLibrary(steamPath);
-        if (!kenshiPath.empty()) return kenshiPath;
+        std::wstring kenshi = FindKenshiInLibrary(std::string(steamPath.begin(), steamPath.end()));
+        if (!kenshi.empty()) return kenshi;
 
-        // Резервный путь по умолчанию
+        // Default path fallback
         std::wstring def = steamPath + L"\\steamapps\\common\\Kenshi";
-        if (PathFileExistsW((def + L"\\kenshi_x64.exe").c_str()))
-            return def;
+        FILE* verify = _wfopen((def + L"\\kenshi_x64.exe").c_str(), L"rb");
+        if (verify) { fclose(verify); return def; }
     }
 
-    // 2. 32-bit реестр (fallback)
+    // Try 32-bit registry
     std::wstring steamPath32 = ReadRegValue(
         HKEY_LOCAL_MACHINE,
         L"SOFTWARE\\Valve\\Steam",
         L"InstallPath"
     );
     if (!steamPath32.empty()) {
-        std::wstring kenshiPath = FindKenshiInLibrary(steamPath32);
-        if (!kenshiPath.empty()) return kenshiPath;
+        std::wstring kenshi = FindKenshiInLibrary(std::string(steamPath32.begin(), steamPath32.end()));
+        if (!kenshi.empty()) return kenshi;
+    }
+
+    // Try user registry (HKEY_CURRENT_USER has lower priority)
+    std::wstring userSteam = ReadRegValue(
+        HKEY_CURRENT_USER,
+        L"SOFTWARE\\Valve\\Steam",
+        L"SteamPath"
+    );
+    if (!userSteam.empty()) {
+        std::wstring kenshi = FindKenshiInLibrary(std::string(userSteam.begin(), userSteam.end()));
+        if (!kenshi.empty()) return kenshi;
     }
 
     return L"";
