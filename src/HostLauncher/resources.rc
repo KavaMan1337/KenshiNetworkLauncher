@@ -1,39 +1,41 @@
 #pragma code_page(65001)
 #include <windows.h>
 
-1000 DIALOGEX 0, 0, 480, 580
+1000 DIALOGEX 0, 0, 480, 590
 STYLE DS_SETFONT | DS_CENTER | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
 CAPTION "Kenshi - Host Launcher"
 FONT 9, "Segoe UI"
 {
     LTEXT "Kenshi Network Launcher - Host", -1, 10, 8, 460, 24, SS_LEFTNOWORDWRAP
 
-    GROUPBOX "Game Folder", -1, 10, 38, 460, 38
-    LTEXT "Path: detecting...", 1, 18, 50, 444, 20, SS_LEFTNOWORDWRAP
+    GROUPBOX "Game Folder", -1, 10, 38, 460, 54
+    LTEXT "Path to Kenshi folder:", -1, 18, 50, 140, 14
+    COMBOBOX 1, 18, 66, 370, 22, CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+    PUSHBUTTON "Browse...", 10, 396, 64, 66, 24
 
-    LTEXT "[--] Kenshi-Online not installed", 2, 10, 84, 460, 18, SS_LEFTNOWORDWRAP
+    LTEXT "[--] Kenshi-Online not installed", 2, 10, 100, 460, 16, SS_LEFTNOWORDWRAP
 
-    CONTROL "", 101, "msctls_progress32", PBS_SMOOTH | WS_BORDER, 10, 106, 460, 14
+    CONTROL "", 101, "msctls_progress32", PBS_SMOOTH | WS_BORDER, 10, 120, 460, 14
 
-    GROUPBOX "Server Settings", -1, 10, 128, 460, 130
-    LTEXT "Server Name:", -1, 18, 142, 100, 16
-    EDITTEXT 103, 18, 158, 280, 22, WS_BORDER | ES_AUTOHSCROLL
-    LTEXT "Port:", -1, 18, 188, 60, 16
-    EDITTEXT 102, 80, 186, 80, 22, WS_BORDER | ES_NUMBER
-    LTEXT "Max Players:", -1, 18, 216, 100, 16
-    CONTROL "", 104, "msctls_trackbar32", TBS_AUTOTICKS | TBS_ENABLESELRANGE | WS_TABSTOP, 18, 232, 280, 24
-    LTEXT "Max Players: 5", 106, 310, 236, 150, 16
-    AUTOCHECKBOX "PvP Enabled", 105, 18, 262, 200, 18
+    GROUPBOX "Server Settings", -1, 10, 142, 460, 130
+    LTEXT "Server Name:", -1, 18, 156, 100, 16
+    EDITTEXT 103, 18, 172, 280, 22, WS_BORDER | ES_AUTOHSCROLL
+    LTEXT "Port:", -1, 18, 202, 60, 16
+    EDITTEXT 102, 80, 200, 80, 22, WS_BORDER | ES_NUMBER
+    LTEXT "Max Players:", -1, 18, 230, 100, 16
+    CONTROL "", 104, "msctls_trackbar32", TBS_AUTOTICKS | TBS_ENABLESELRANGE | WS_TABSTOP, 18, 246, 280, 24
+    LTEXT "Max Players: 5", 106, 310, 250, 150, 16
+    AUTOCHECKBOX "PvP Enabled", 105, 18, 276, 200, 18
 
-    GROUPBOX "Connection Address", -1, 10, 266, 460, 50
-    LTEXT "Your IP (VPN): detecting...", 300, 18, 280, 380, 20, SS_LEFTNOWORDWRAP
-    PUSHBUTTON "Copy IP", 7, 400, 278, 60, 22
+    GROUPBOX "Connection Address", -1, 10, 280, 460, 50
+    LTEXT "Your IP (VPN): detecting...", 300, 18, 294, 380, 20, SS_LEFTNOWORDWRAP
+    PUSHBUTTON "Copy IP", 7, 400, 292, 62, 22
 
-    GROUPBOX "Server Log", -1, 10, 324, 460, 160
-    LISTBOX 100, 18, 338, 444, 138, WS_VSCROLL | WS_HSCROLL | LBS_USETABSTOPS
+    GROUPBOX "Server Log", -1, 10, 338, 460, 160
+    LISTBOX 100, 18, 352, 444, 138, WS_VSCROLL | WS_HSCROLL | LBS_USETABSTOPS
 
-    DEFPUSHBUTTON "Install Mod", 3, 10, 492, 140, 32
-    PUSHBUTTON "Start Server", 4, 160, 492, 160, 32, WS_DISABLED
-    PUSHBUTTON "Stop", 5, 330, 492, 60, 32, WS_DISABLED
-    PUSHBUTTON "Exit", 6, 400, 492, 70, 32
+    DEFPUSHBUTTON "Install Mod", 3, 10, 508, 140, 32
+    PUSHBUTTON "Start Server", 4, 160, 508, 160, 32, WS_DISABLED
+    PUSHBUTTON "Stop", 5, 330, 508, 60, 32, WS_DISABLED
+    PUSHBUTTON "Exit", 6, 400, 508, 70, 32
 }

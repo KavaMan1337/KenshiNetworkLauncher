@@ -1,40 +1,35 @@
 #pragma code_page(65001)
 #include <windows.h>
 
-1000 DIALOGEX 0, 0, 420, 400
+1000 DIALOGEX 0, 0, 480, 480
 STYLE DS_SETFONT | DS_CENTER | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
-CAPTION "Kenshi — Клиентский лаунчер"
+CAPTION "Kenshi Network Launcher — Client"
 FONT 9, "Segoe UI"
 {
-    // Заголовок
-    LTEXT " Kenshi Network Launcher — Клиент", -1, 10, 8, 400, 24, SS_LEFTNOWORDWRAP
+    LTEXT "Kenshi Network Launcher — Client", -1, 10, 8, 460, 24, SS_LEFTNOWORDWRAP
 
-    // Путь к игре
-    GROUPBOX "Игровая папка", -1, 10, 38, 400, 38
-    LTEXT "Путь: определяется...", 1, 18, 50, 384, 20, SS_LEFTNOWORDWRAP
+    GROUPBOX "Game Folder", -1, 10, 38, 460, 58
+    LTEXT "Path to Kenshi folder:", -1, 18, 50, 140, 14
+    COMBOBOX 1, 18, 66, 370, 22, CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+    PUSHBUTTON "Browse...", 10, 396, 64, 66, 24
 
-    // Статус мода
-    LTEXT "[—] Kenshi-Online не установлен", 2, 10, 84, 400, 18, SS_LEFTNOWORDWRAP
+    LTEXT "[--] Kenshi-Online not installed", 2, 10, 104, 460, 16, SS_LEFTNOWORDWRAP
 
-    // Прогресс
-    CONTROL "", 101, "msctls_progress32", PBS_SMOOTH | WS_BORDER, 10, 106, 400, 14
+    CONTROL "", 101, "msctls_progress32", PBS_SMOOTH | WS_BORDER, 10, 124, 460, 14
 
-    // Настройки подключения
-    GROUPBOX "Подключение к серверу", -1, 10, 126, 400, 120
-    LTEXT "Ваше имя:", -1, 18, 140, 80, 16
-    EDITTEXT 103, 18, 158, 380, 22, WS_BORDER | ES_AUTOHSCROLL
-    LTEXT "Адрес сервера (IP:Port):", -1, 18, 188, 180, 16
-    EDITTEXT 104, 18, 206, 380, 22, WS_BORDER | ES_AUTOHSCROLL
+    GROUPBOX "Server Connection", -1, 10, 146, 460, 120
+    LTEXT "Your Name:", -1, 18, 160, 80, 16
+    EDITTEXT 103, 18, 178, 380, 22, WS_BORDER | ES_AUTOHSCROLL
+    LTEXT "Server Address (IP:Port):", -1, 18, 210, 180, 16
+    EDITTEXT 104, 18, 228, 380, 22, WS_BORDER | ES_AUTOHSCROLL
 
-    // Кнопки
-    DEFPUSHBUTTON "Установить мод", 3, 10, 258, 120, 32
-    PUSHBUTTON "Играть", 4, 140, 258, 140, 32, WS_DISABLED
-    PUSHBUTTON "Выход", 5, 290, 258, 110, 32
+    DEFPUSHBUTTON "Install Mod", 3, 10, 278, 140, 32
+    PUSHBUTTON "Play", 4, 160, 278, 160, 32, WS_DISABLED
+    PUSHBUTTON "Exit", 5, 330, 278, 60, 32
 
-    // Информация
-    GROUPBOX "Подсказка", -1, 10, 300, 400, 82
-    LTEXT "1. Нажмите 'Установить мод' — лаунчер скачает Kenshi-Online", -1, 18, 314, 384, 14
-    LTEXT "2. Получите IP:Port от хоста (из лаунчера хоста)", -1, 18, 330, 384, 14
-    LTEXT "3. Введите IP:Port и своё имя, нажмите 'Играть'", -1, 18, 346, 384, 14
-    LTEXT "4. В Kenshi нажмите MULTIPLAYER или кнопку ` (Ё)", -1, 18, 362, 384, 14
+    GROUPBOX "Help", -1, 10, 320, 460, 100
+    LTEXT "1. Click 'Install Mod' — launcher downloads Kenshi-Online", -1, 18, 334, 440, 14
+    LTEXT "2. Get IP:Port from the host launcher", -1, 18, 350, 440, 14
+    LTEXT "3. Enter IP:Port and your name, click 'Play'", -1, 18, 366, 440, 14
+    LTEXT "4. In Kenshi, press MULTIPLAYER or the ` (Backtick) key", -1, 18, 382, 440, 14
 }

@@ -2,6 +2,7 @@
 #include "../LauncherCommon/LauncherCommon.h"
 #include <windows.h>
 #include <commctrl.h>
+#include <shlobj.h>
 #include <string>
 #include <thread>
 #include <mutex>
@@ -14,7 +15,6 @@ using namespace LauncherCommon;
 
 #pragma comment(lib, "comctl32.lib")
 
-// Macro compatibility wrappers
 #ifndef Button_SetCheck
 #define Button_SetCheck(hwnd, state) ((void)SendMessageW((hwnd), BM_SETCHECK, (WPARAM)(state), 0))
 #endif
@@ -28,38 +28,32 @@ using namespace LauncherCommon;
 #define MAKEPARAM(a, b) ((LPARAM)MAKELONG(a, b))
 #endif
 
-// Структура конфигурации сервера
 struct ServerConfig {
     std::wstring serverName = L"Kenshi Server";
     int port = 27800;
     int maxPlayers = 5;
     bool pvpEnabled = true;
-    std::wstring kenshiPath;
-    std::wstring kenshiVersion;
     bool modInstalled = false;
 };
 
-// Глобальные данные окна
 static HWND g_hwnd = nullptr;
 static HWND g_hLog = nullptr;
-static HWND g_hStatus = nullptr;
 static HWND g_hInstallBtn = nullptr;
 static HWND g_hLaunchBtn = nullptr;
 static HWND g_hStopBtn = nullptr;
 static HWND g_hProgress = nullptr;
-static HWND g_hPortEdit = nullptr;
-static HWND g_hNameEdit = nullptr;
-static HWND g_hPlayersSlider = nullptr;
-static HWND g_hPlayersLabel = nullptr;
-static HWND g_hPvPCheck = nullptr;
-static HWND g_hIPLabel = nullptr;
+static HWND g_hPathCombo = nullptr;
 static bool g_serverRunning = false;
 static ServerConfig g_config;
-static std::mutex g_mutex;
-
 static std::wstring g_kenshiPath;
 static std::wstring g_localIP;
 static int g_localPort = 27800;
+
+static bool VerifyKenshiPath(const std::wstring& path) {
+    if (path.empty()) return false;
+    std::wstring exe = path + L"\\kenshi_x64.exe";
+    return GetFileAttributesW(exe.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
 
 static void AddLog(HWND hwnd, const wchar_t* msg) {
     if (!hwnd) return;
@@ -83,143 +77,183 @@ static void SetProgress(HWND hwnd, int progress) {
 }
 
 static void EnableControls(HWND hwnd, bool enable) {
-    EnableWindow(GetDlgItem(hwnd, 102), enable); // port
-    EnableWindow(GetDlgItem(hwnd, 103), enable); // name
-    EnableWindow(GetDlgItem(hwnd, 104), enable); // slider
-    EnableWindow(GetDlgItem(hwnd, 105), enable); // pvp
+    EnableWindow(GetDlgItem(hwnd, 102), enable);
+    EnableWindow(GetDlgItem(hwnd, 103), enable);
+    EnableWindow(GetDlgItem(hwnd, 104), enable);
+    EnableWindow(GetDlgItem(hwnd, 105), enable);
+}
+
+static void UpdateModStatus(HWND hwnd, const std::wstring& path) {
+    bool installed = IsModInstalled(path);
+    g_config.modInstalled = installed;
+    if (installed) {
+        SetDlgItemTextW(hwnd, 2, L"[OK] Kenshi-Online mod installed");
+    } else {
+        SetDlgItemTextW(hwnd, 2, L"[--] Kenshi-Online mod NOT installed");
+    }
+    EnableWindow(g_hLaunchBtn, installed ? TRUE : FALSE);
+}
+
+static void SetKenshiPath(HWND hwnd, const std::wstring& path) {
+    g_kenshiPath = path;
+    if (!path.empty()) {
+        SendMessageW(g_hPathCombo, CB_RESETCONTENT, 0, 0);
+        SendMessageW(g_hPathCombo, CB_ADDSTRING, 0, (LPARAM)path.c_str());
+        SendMessageW(g_hPathCombo, CB_SETCURSEL, 0, 0);
+    }
+    UpdateModStatus(hwnd, path);
+}
+
+static void RefreshIP(HWND hwnd) {
+    g_localIP = GetLocalVPNIP();
+    if (g_localIP.empty()) g_localIP = GetLocalIP();
+    wchar_t buf[128];
+    swprintf(buf, L"Your IP (VPN): %s", g_localIP.c_str());
+    SetDlgItemTextW(hwnd, 300, buf);
 }
 
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_INITDIALOG: {
         g_hwnd = hwnd;
+        SetWindowPos(hwnd, nullptr, 0, 0, 500, 620, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowTextW(hwnd, L"Kenshi - Host Launcher");
 
-        // Стиль окна
-        SetWindowPos(hwnd, nullptr, 0, 0, 520, 620, SWP_NOMOVE | SWP_NOZORDER);
-        SetWindowTextW(hwnd, L"Kenshi — Лаунчер хоста");
+        g_hPathCombo = GetDlgItem(hwnd, 1);
+        g_hInstallBtn = GetDlgItem(hwnd, 3);
+        g_hLaunchBtn = GetDlgItem(hwnd, 4);
+        g_hStopBtn = GetDlgItem(hwnd, 5);
+        g_hProgress = GetDlgItem(hwnd, 101);
 
-        // Ищем Kenshi
-        g_kenshiPath = LauncherCommon::FindKenshiPath();
-        g_localIP = LauncherCommon::GetLocalVPNIP();
-        if (g_localIP.empty()) g_localIP = LauncherCommon::GetLocalIP();
+        SendMessageW(g_hProgress, PBM_SETRANGE, 0, MAKEPARAM(0, 100));
+        SendMessageW(g_hProgress, PBM_SETPOS, 0, 0);
 
-        wchar_t buf[256];
-        if (!g_kenshiPath.empty()) {
-            swprintf(buf, L"Путь: %s", g_kenshiPath.c_str());
-            g_config.kenshiPath = g_kenshiPath;
-            g_config.modInstalled = LauncherCommon::IsModInstalled(g_kenshiPath);
-        } else {
-            wcscpy(buf, L" Kenshi не найден. Установите игру в Steam.");
-        }
-        SetDlgItemTextW(hwnd, 1, buf);
-
-        // Статус мода
-        if (g_config.modInstalled) {
-            SetDlgItemTextW(hwnd, 2, L"[✓] Kenshi-Online мод установлен");
-        } else {
-            SetDlgItemTextW(hwnd, 2, L"[—] Kenshi-Online мод не установлен");
+        // Auto-detect Kenshi
+        std::wstring detected = FindKenshiPath();
+        if (!detected.empty()) {
+            SetKenshiPath(hwnd, detected);
         }
 
-        // IP
-        swprintf(buf, L"Ваш IP (VPN): %s", g_localIP.c_str());
-        SetDlgItemTextW(hwnd, 300, buf);
-        g_hIPLabel = GetDlgItem(hwnd, 300);
+        RefreshIP(hwnd);
 
-        // Начальные значения
+        // Default server settings
         SetDlgItemTextW(hwnd, 103, g_config.serverName.c_str());
         wchar_t portBuf[16];
         swprintf(portBuf, L"%d", g_config.port);
         SetDlgItemTextW(hwnd, 102, portBuf);
         SendMessageW(GetDlgItem(hwnd, 104), TBM_SETRANGE, TRUE, MAKELONG(1, 5));
         SendMessageW(GetDlgItem(hwnd, 104), TBM_SETPOS, TRUE, g_config.maxPlayers);
-        swprintf(buf, L"Макс. игроков: %d", g_config.maxPlayers);
-        SetDlgItemTextW(hwnd, 106, buf);
+        wchar_t playersBuf[32];
+        swprintf(playersBuf, L"Max Players: %d", g_config.maxPlayers);
+        SetDlgItemTextW(hwnd, 106, playersBuf);
         Button_SetCheck(GetDlgItem(hwnd, 105), g_config.pvpEnabled ? BST_CHECKED : BST_UNCHECKED);
 
-        // Кнопки
-        g_hInstallBtn = GetDlgItem(hwnd, 3);
-        g_hLaunchBtn = GetDlgItem(hwnd, 4);
-        g_hStopBtn = GetDlgItem(hwnd, 5);
         EnableWindow(g_hLaunchBtn, g_config.modInstalled ? TRUE : FALSE);
         EnableWindow(g_hStopBtn, FALSE);
 
-        // Прогресс бар
-        g_hProgress = GetDlgItem(hwnd, 101);
-        SendMessageW(g_hProgress, PBM_SETRANGE, 0, MAKEPARAM(0, 100));
-        SendMessageW(g_hProgress, PBM_SETPOS, 0, 0);
-
         AddLog(hwnd, L"=== Kenshi Network Launcher ===");
-        AddLog(hwnd, L"Если Kenshi не найден — установите игру в Steam и перезапустите лаунчер.");
-        if (!g_kenshiPath.empty() && !g_config.modInstalled) {
-            AddLog(hwnd, L"Нажмите 'Установить мод' для загрузки Kenshi-Online.");
-        } else if (!g_kenshiPath.empty()) {
-            AddLog(hwnd, L"Мод установлен. Нажмите 'Запустить сервер'.");
-        }
+        AddLog(hwnd, L"1. Select Kenshi folder (Browse) or it will auto-detect");
+        AddLog(hwnd, L"2. Click 'Install Mod' to download Kenshi-Online");
+        AddLog(hwnd, L"3. Click 'Start Server'");
+        AddLog(hwnd, L"4. Copy IP and share with friends");
         return TRUE;
     }
 
     case WM_COMMAND: {
         int id = LOWORD(wParam);
 
-        if (id == 3) { // Установить мод
-            if (g_kenshiPath.empty()) {
-                MessageBoxW(hwnd, L"Kenshi не найден. Проверьте установку игры.", L"Ошибка", MB_ICONERROR);
+        if (id == 10) { // Browse button
+            wchar_t selectedPath[MAX_PATH] = {};
+            BROWSEINFOW bi = {};
+            bi.lpszTitle = L"Select Kenshi folder";
+            bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+            bi.hwndOwner = hwnd;
+            LPITEMIDLIST pidl = SHBrowseForFolderW(&bi);
+            if (pidl) {
+                if (SHGetPathFromIDListW(pidl, selectedPath)) {
+                    SetKenshiPath(hwnd, selectedPath);
+                    AddLog(hwnd, L"Path updated.");
+                }
+                IMalloc* imalloc = nullptr;
+                if (SUCCEEDED(SHGetMalloc(&imalloc))) {
+                    imalloc->Free(pidl);
+                    imalloc->Release();
+                }
+            }
+            return TRUE;
+        }
+
+        if (id == 1 && HIWORD(wParam) == CBN_EDITCHANGE) {
+            // User typed in combobox
+            wchar_t buf[MAX_PATH];
+            GetWindowTextW(g_hPathCombo, buf, MAX_PATH);
+            std::wstring path(buf);
+            if (VerifyKenshiPath(path)) {
+                SetKenshiPath(hwnd, path);
+            }
+            return TRUE;
+        }
+
+        if (id == 3) { // Install Mod
+            wchar_t buf[MAX_PATH];
+            GetWindowTextW(g_hPathCombo, buf, MAX_PATH);
+            g_kenshiPath = buf;
+
+            if (!VerifyKenshiPath(g_kenshiPath)) {
+                MessageBoxW(hwnd, L"Please select a valid Kenshi folder (the folder containing kenshi_x64.exe)", L"Error", MB_ICONERROR);
                 return TRUE;
             }
 
             EnableWindow(g_hInstallBtn, FALSE);
-            SetStatus(hwnd, L"Скачивание Kenshi-Online...");
+            SetStatus(hwnd, L"Downloading Kenshi-Online...");
             SetProgress(hwnd, 10);
-            AddLog(hwnd, L"Подключение к GitHub...");
+            AddLog(hwnd, L"Connecting to GitHub...");
 
             std::thread([hwnd]() {
                 LatestRelease release;
-                bool ok = FetchLatestRelease("The404Studios", "Kenshi-Online", release);
-
-                if (!ok) {
-                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Ошибка: не удалось получить информацию о релизе. Проверьте интернет-соединение.");
+                if (!FetchLatestRelease("The404Studios", "Kenshi-Online", release)) {
+                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Error: Could not fetch release info. Check internet connection.");
                     return;
                 }
 
                 wchar_t logBuf[256];
-                swprintf(logBuf, L"Найден релиз: %S", release.version.c_str());
+                swprintf(logBuf, L"Found release: %S", release.version.c_str());
                 AddLog(hwnd, logBuf);
                 SetProgress(hwnd, 30);
 
-                AddLog(hwnd, L"Скачивание архива...");
+                AddLog(hwnd, L"Downloading archive...");
                 std::wstring modPath = DownloadAndExtract(release.zipUrl, g_kenshiPath);
                 SetProgress(hwnd, 80);
 
                 if (modPath.empty()) {
-                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Ошибка: не удалось скачать мод. Проверьте интернет-соединение.");
+                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Error: Download failed. Check internet connection.");
                     return;
                 }
 
-                AddLog(hwnd, L"Установка файлов мода...");
+                AddLog(hwnd, L"Installing mod files...");
                 std::wstring err;
                 DeployResult res = DeployModFiles(g_kenshiPath, modPath, &err);
                 SetProgress(hwnd, 100);
 
                 if (res == DeployResult::Success) {
-                    PostMessageW(hwnd, WM_USER + 1, 3, 0); // install complete
+                    PostMessageW(hwnd, WM_USER + 1, 3, 0);
                 } else if (res == DeployResult::KenshiNotFound) {
-                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Ошибка: папка Kenshi не найдена.");
+                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Error: Kenshi folder not valid.");
                 } else {
                     wchar_t errBuf[512];
-                    swprintf(errBuf, L"Ошибка установки: %d", (int)res);
+                    swprintf(errBuf, L"Error: %d", (int)res);
                     PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)errBuf);
                 }
             }).detach();
             return TRUE;
         }
 
-        if (id == 4) { // Запустить сервер
+        if (id == 4) { // Start Server
             if (!g_config.modInstalled) {
-                MessageBoxW(hwnd, L"Сначала установите мод.", L"Ошибка", MB_ICONERROR);
+                MessageBoxW(hwnd, L"Please install the mod first.", L"Error", MB_ICONERROR);
                 return TRUE;
             }
 
-            // Читаем настройки
             wchar_t nameBuf[128], portBuf[16];
             GetDlgItemTextW(hwnd, 103, nameBuf, 128);
             GetDlgItemTextW(hwnd, 102, portBuf, 16);
@@ -238,13 +272,12 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             EnableWindow(g_hLaunchBtn, FALSE);
             EnableWindow(g_hStopBtn, TRUE);
             EnableWindow(g_hInstallBtn, FALSE);
-            SetStatus(hwnd, L"Запуск сервера...");
+            SetStatus(hwnd, L"Starting server...");
 
-            AddLog(hwnd, L"Генерация server.json...");
-            AddLog(hwnd, L"Запуск KenshiMP.Server.exe...");
+            AddLog(hwnd, L"Generating server.json...");
+            AddLog(hwnd, L"Starting KenshiMP.Server.exe...");
 
             std::thread([hwnd, port, players, pvp]() {
-                // Генерируем server.json
                 std::wstring jsonPath = g_kenshiPath + L"\\server.json";
                 FILE* f = _wfopen(jsonPath.c_str(), L"w, ccs=UTF-8");
                 if (f) {
@@ -261,18 +294,17 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     fwprintf(f, L"  \"password\": \"\"\n");
                     fwprintf(f, L"}\n");
                     fclose(f);
-                    AddLog(hwnd, L"server.json создан.");
+                    AddLog(hwnd, L"server.json created.");
                 } else {
-                    AddLog(hwnd, L"Ошибка: не удалось создать server.json");
+                    AddLog(hwnd, L"Error: Could not create server.json");
                     PostMessageW(hwnd, WM_USER + 1, 4, 0);
                     return;
                 }
 
-                // Запускаем сервер
                 std::wstring serverExe = g_kenshiPath + L"\\KenshiMP.Server.exe";
                 if (GetFileAttributesW(serverExe.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                    AddLog(hwnd, L"Ошибка: KenshiMP.Server.exe не найден");
-                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Ошибка: KenshiMP.Server.exe не найден. Установите мод заново.");
+                    AddLog(hwnd, L"Error: KenshiMP.Server.exe not found. Reinstall the mod.");
+                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Error: KenshiMP.Server.exe not found. Reinstall the mod.");
                     PostMessageW(hwnd, WM_USER + 1, 4, 0);
                     return;
                 }
@@ -289,14 +321,13 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 si.hStdOutput = hOutW;
                 si.hStdError = hOutW;
 
-                std::wstring workDir = g_kenshiPath;
                 BOOL created = CreateProcessW(serverExe.c_str(), nullptr,
                     nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
-                    workDir.c_str(), &si, &pi);
+                    g_kenshiPath.c_str(), &si, &pi);
 
                 if (!created) {
-                    AddLog(hwnd, L"Ошибка: не удалось запустить сервер");
-                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Не удалось запустить KenshiMP.Server.exe");
+                    AddLog(hwnd, L"Error: Could not start server");
+                    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)L"Error: Could not start KenshiMP.Server.exe");
                     PostMessageW(hwnd, WM_USER + 1, 4, 0);
                     CloseHandle(hOutR);
                     CloseHandle(hOutW);
@@ -306,27 +337,25 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 CloseHandle(hOutW);
                 g_serverRunning = true;
 
-                // Читаем вывод сервера в цикле
-                char lineBuf[1024];
+                char lineBuf[4096];
                 DWORD bytesRead;
                 while (g_serverRunning) {
-                    if (ReadFile(hOutR, lineBuf, sizeof(lineBuf) - 1, &bytesRead, nullptr) && bytesRead > 0) {
-                        lineBuf[bytesRead] = '\0';
-                        for (char* p = lineBuf; *p; ++p) {
-                            if (*p == '\n' || *p == '\r') {
-                                if (p > lineBuf && *(p - 1) != '\n' && *(p - 1) != '\r') {
-                                    *p = '\0';
-                                    std::string s(lineBuf);
-                                    std::wstring ws(s.begin(), s.end());
-                                    AddLog(hwnd, ws.c_str());
-                                    p++;
-                                    memmove(lineBuf, p, strlen(p) + 1);
-                                    p = lineBuf - 1;
-                                }
+                    if (!ReadFile(hOutR, lineBuf, sizeof(lineBuf) - 1, &bytesRead, nullptr) || bytesRead == 0)
+                        break;
+
+                    lineBuf[bytesRead] = '\0';
+                    for (char* p = lineBuf; *p; ++p) {
+                        if (*p == '\n' || *p == '\r') {
+                            if (p > lineBuf && *(p - 1) != '\n' && *(p - 1) != '\r') {
+                                *p = '\0';
+                                std::string s(lineBuf);
+                                std::wstring ws(s.begin(), s.end());
+                                AddLog(hwnd, ws.c_str());
+                                p++;
+                                memmove(lineBuf, p, strlen(p) + 1);
+                                p = lineBuf - 1;
                             }
                         }
-                    } else {
-                        break;
                     }
 
                     DWORD code;
@@ -334,7 +363,7 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                         break;
                 }
 
-                AddLog(hwnd, L"Сервер остановлен.");
+                AddLog(hwnd, L"Server stopped.");
                 PostMessageW(hwnd, WM_USER + 1, 4, 0);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
@@ -344,29 +373,23 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return TRUE;
         }
 
-        if (id == 5) { // Остановить сервер
+        if (id == 5) { // Stop
             g_serverRunning = false;
-            AddLog(hwnd, L"Остановка сервера...");
+            AddLog(hwnd, L"Stopping server...");
             EnableWindow(g_hStopBtn, FALSE);
-            SetStatus(hwnd, L"Сервер останавливается...");
+            SetStatus(hwnd, L"Server stopping...");
             return TRUE;
         }
 
         if (id == 104 + 1000) { // Slider scroll
             int pos = SendMessageW((HWND)lParam, TBM_GETPOS, 0, 0);
             wchar_t buf[64];
-            swprintf(buf, L"Макс. игроков: %d", pos);
+            swprintf(buf, L"Max Players: %d", pos);
             SetDlgItemTextW(hwnd, 106, buf);
             return TRUE;
         }
 
-        if (id == 6) { // Выход
-            g_serverRunning = false;
-            EndDialog(hwnd, 0);
-            return TRUE;
-        }
-
-        if (id == 7) { // Копировать IP
+        if (id == 7) { // Copy IP
             if (g_localIP.empty()) return TRUE;
             wchar_t buf[128];
             swprintf(buf, L"%s:%d", g_localIP.c_str(), g_localPort);
@@ -381,7 +404,13 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
                 CloseClipboard();
             }
-            AddLog(hwnd, L"IP скопирован в буфер обмена!");
+            AddLog(hwnd, L"IP copied to clipboard!");
+            return TRUE;
+        }
+
+        if (id == 6) { // Exit
+            g_serverRunning = false;
+            EndDialog(hwnd, 0);
             return TRUE;
         }
 
@@ -394,27 +423,27 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         switch (type) {
         case 2: // Error
-            MessageBoxW(hwnd, msg, L"Ошибка", MB_ICONERROR);
+            MessageBoxW(hwnd, msg, L"Error", MB_ICONERROR);
             EnableWindow(g_hInstallBtn, TRUE);
             SetProgress(hwnd, 0);
-            SetStatus(hwnd, L"Ошибка");
+            SetStatus(hwnd, L"Error");
             break;
         case 3: // Install complete
             g_config.modInstalled = true;
-            SetDlgItemTextW(hwnd, 2, L"[✓] Kenshi-Online мод установлен");
-            SetStatus(hwnd, L"Мод установлен!");
+            SetDlgItemTextW(hwnd, 2, L"[OK] Kenshi-Online mod installed!");
+            SetStatus(hwnd, L"Mod installed!");
             SetProgress(hwnd, 100);
             EnableWindow(g_hInstallBtn, FALSE);
             EnableWindow(g_hLaunchBtn, TRUE);
-            AddLog(hwnd, L"=== Установка завершена ===");
-            AddLog(hwnd, L"Нажмите 'Запустить сервер' для начала игры.");
+            AddLog(hwnd, L"=== Install complete ===");
+            AddLog(hwnd, L"Click 'Start Server' to begin.");
             break;
         case 4: // Server stopped
             EnableControls(hwnd, true);
             EnableWindow(g_hInstallBtn, TRUE);
             EnableWindow(g_hLaunchBtn, TRUE);
             EnableWindow(g_hStopBtn, FALSE);
-            SetStatus(hwnd, L"Сервер остановлен");
+            SetStatus(hwnd, L"Server stopped");
             g_serverRunning = false;
             break;
         }
@@ -448,12 +477,8 @@ void HostWindowSetServerRunning(HWND hwnd, bool running) {
 }
 void HostWindowSetServerIP(HWND hwnd, const wchar_t* ip, int port) {
     wchar_t buf[128];
-    swprintf(buf, L"Ваш IP (VPN): %s:%d", ip, port);
+    swprintf(buf, L"Your IP (VPN): %s:%d", ip, port);
     SetDlgItemTextW(hwnd, 300, buf);
 }
-void HostWindowNotifyInstallComplete(HWND hwnd) {
-    PostMessageW(hwnd, WM_USER + 1, 3, 0);
-}
-void HostWindowNotifyError(HWND hwnd, const wchar_t* err) {
-    PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)err);
-}
+void HostWindowNotifyInstallComplete(HWND hwnd) { PostMessageW(hwnd, WM_USER + 1, 3, 0); }
+void HostWindowNotifyError(HWND hwnd, const wchar_t* err) { PostMessageW(hwnd, WM_USER + 1, 2, (LPARAM)err); }

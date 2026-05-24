@@ -2,6 +2,7 @@
 #include "../LauncherCommon/LauncherCommon.h"
 #include <windows.h>
 #include <commctrl.h>
+#include <shlobj.h>
 #include <string>
 #include <thread>
 #include <vector>
@@ -23,6 +24,7 @@ static HWND g_hProgress = nullptr;
 static HWND g_hInstallBtn = nullptr;
 static HWND g_hPlayBtn = nullptr;
 static HWND g_hStatus = nullptr;
+static HWND g_hPathCombo = nullptr;
 static std::wstring g_kenshiPath;
 static bool g_modInstalled = false;
 
@@ -39,6 +41,70 @@ static void SetProgress(HWND hwnd, int p) {
     SendMessageW(g_hProgress, PBM_SETPOS, p, 0);
 }
 
+static bool VerifyKenshiPath(const std::wstring& path) {
+    if (path.empty()) return false;
+    std::wstring exe = path + L"\\kenshi_x64.exe";
+    return GetFileAttributesW(exe.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+static void UpdateModStatus(HWND hwnd, const std::wstring& path) {
+    if (!hwnd) return;
+    if (path.empty()) {
+        SetStatus(hwnd, L"[--] Kenshi not found. Select the Kenshi folder manually.");
+        EnableWindow(g_hInstallBtn, FALSE);
+        EnableWindow(g_hPlayBtn, FALSE);
+        return;
+    }
+    if (!VerifyKenshiPath(path)) {
+        SetStatus(hwnd, L"[X] Invalid folder — kenshi_x64.exe not found.");
+        EnableWindow(g_hInstallBtn, FALSE);
+        EnableWindow(g_hPlayBtn, FALSE);
+        return;
+    }
+    g_kenshiPath = path;
+    bool installed = LauncherCommon::IsModInstalled(path);
+    g_modInstalled = installed;
+    if (installed) {
+        SetStatus(hwnd, L"[OK] Kenshi-Online mod is installed.");
+        EnableWindow(g_hInstallBtn, FALSE);
+        EnableWindow(g_hPlayBtn, TRUE);
+    } else {
+        SetStatus(hwnd, L"[--] Kenshi-Online mod not installed.");
+        EnableWindow(g_hInstallBtn, TRUE);
+        EnableWindow(g_hPlayBtn, FALSE);
+    }
+}
+
+static void SetKenshiPath(HWND hwnd, const std::wstring& path) {
+    g_kenshiPath = path;
+    if (!path.empty()) {
+        SendMessageW(g_hPathCombo, CB_RESETCONTENT, 0, 0);
+        SendMessageW(g_hPathCombo, CB_ADDSTRING, 0, (LPARAM)path.c_str());
+        SendMessageW(g_hPathCombo, CB_SETCURSEL, 0, 0);
+    }
+    UpdateModStatus(hwnd, path);
+}
+
+static void BrowseFolder(HWND hwnd) {
+    wchar_t buf[MAX_PATH] = {};
+    BROWSEINFOW bi = {};
+    bi.lpszTitle = L"Select the Kenshi game folder";
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    LPITEMIDLIST pidl = SHBrowseForFolderW(&bi);
+    if (pidl) {
+        if (SHGetPathFromIDListW(pidl, buf)) {
+            SetKenshiPath(hwnd, std::wstring(buf));
+        }
+        CoTaskMemFree(pidl);
+    }
+}
+
+static std::wstring GetComboText(HWND hCombo) {
+    wchar_t buf[MAX_PATH * 2] = {};
+    SendMessageW(hCombo, WM_GETTEXT, MAX_PATH * 2, (LPARAM)buf);
+    return std::wstring(buf);
+}
+
 static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_INITDIALOG: {
@@ -47,62 +113,76 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         g_hInstallBtn = GetDlgItem(hwnd, 3);
         g_hPlayBtn = GetDlgItem(hwnd, 4);
         g_hStatus = GetDlgItem(hwnd, 2);
+        g_hPathCombo = GetDlgItem(hwnd, 1);
 
-        SetWindowPos(hwnd, nullptr, 0, 0, 440, 400, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hwnd, nullptr, 0, 0, 480, 490, SWP_NOMOVE | SWP_NOZORDER);
 
         SendMessageW(g_hProgress, PBM_SETRANGE, 0, MAKEPARAM(0, 100));
         SendMessageW(g_hProgress, PBM_SETPOS, 0, 0);
 
-        // Ищем Kenshi
-        g_kenshiPath = LauncherCommon::FindKenshiPath();
-        if (!g_kenshiPath.empty()) {
-            wchar_t buf[512];
-            swprintf(buf, L"Путь: %s", g_kenshiPath.c_str());
-            SetDlgItemTextW(hwnd, 1, buf);
-
-            g_modInstalled = LauncherCommon::IsModInstalled(g_kenshiPath);
-            if (g_modInstalled) {
-                SetDlgItemTextW(hwnd, 2, L"[✓] Kenshi-Online мод установлен");
-                EnableWindow(g_hPlayBtn, TRUE);
-            } else {
-                SetDlgItemTextW(hwnd, 2, L"[—] Kenshi-Online мод не установлен");
-            }
+        std::wstring autoPath = LauncherCommon::FindKenshiPath();
+        if (!autoPath.empty()) {
+            SetKenshiPath(hwnd, autoPath);
         } else {
-            SetDlgItemTextW(hwnd, 1, L" Kenshi не найден. Установите игру в Steam.");
-            SetDlgItemTextW(hwnd, 2, L"[✗] Установите Kenshi в Steam и перезапустите лаунчер.");
+            SetStatus(hwnd, L"[--] Kenshi not found. Click 'Browse...' to select the folder.");
+            EnableWindow(g_hInstallBtn, FALSE);
+            EnableWindow(g_hPlayBtn, FALSE);
         }
-
         return TRUE;
     }
 
     case WM_COMMAND: {
         int id = LOWORD(wParam);
+        int code = HIWORD(wParam);
 
-        if (id == 3) { // Установить мод
-            if (g_kenshiPath.empty()) {
-                MessageBoxW(hwnd, L"Kenshi не найден.", L"Ошибка", MB_ICONERROR);
+        if (id == 10 && code == BN_CLICKED) {
+            BrowseFolder(hwnd);
+            return TRUE;
+        }
+
+        if (id == 1 && code == CBN_EDITCHANGE) {
+            std::wstring path = GetComboText(g_hPathCombo);
+            if (!path.empty()) {
+                SetKenshiPath(hwnd, path);
+            }
+            return TRUE;
+        }
+
+        if (id == 1 && code == CBN_SELCHANGE) {
+            int sel = SendMessageW(g_hPathCombo, CB_GETCURSEL, 0, 0);
+            if (sel != CB_ERR) {
+                wchar_t buf[MAX_PATH * 2] = {};
+                SendMessageW(g_hPathCombo, CB_GETLBTEXT, sel, (LPARAM)buf);
+                SetKenshiPath(hwnd, std::wstring(buf));
+            }
+            return TRUE;
+        }
+
+        if (id == 3) {
+            if (g_kenshiPath.empty() || !VerifyKenshiPath(g_kenshiPath)) {
+                MessageBoxW(hwnd, L"Select the Kenshi game folder first.", L"Error", MB_ICONERROR);
                 return TRUE;
             }
 
             EnableWindow(g_hInstallBtn, FALSE);
-            SetStatus(hwnd, L"Скачивание Kenshi-Online...");
+            SetStatus(hwnd, L"Downloading Kenshi-Online...");
             SetProgress(hwnd, 10);
 
             std::thread([hwnd]() {
                 LatestRelease release;
                 if (!FetchLatestRelease("The404Studios", "Kenshi-Online", release)) {
-                    PostMessageW(hwnd, WM_INSTALL_ERROR, 0, (LPARAM)L"Не удалось получить информацию о релизе.");
+                    PostMessageW(hwnd, WM_INSTALL_ERROR, 0, (LPARAM)L"Failed to fetch release info.");
                     return;
                 }
 
                 wchar_t buf[256];
-                swprintf(buf, L"Релиз: %S", release.version.c_str());
+                swprintf(buf, L"Release: %S", release.version.c_str());
                 SetStatus(hwnd, buf);
                 SetProgress(hwnd, 30);
 
                 std::wstring modPath = DownloadAndExtract(release.zipUrl, g_kenshiPath);
                 if (modPath.empty()) {
-                    PostMessageW(hwnd, WM_INSTALL_ERROR, 0, (LPARAM)L"Ошибка скачивания.");
+                    PostMessageW(hwnd, WM_INSTALL_ERROR, 0, (LPARAM)L"Download failed.");
                     return;
                 }
 
@@ -116,38 +196,36 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     PostMessageW(hwnd, WM_INSTALL_COMPLETE, 0, 0);
                 } else {
                     wchar_t errBuf[512];
-                    swprintf(errBuf, L"Ошибка установки: %d", (int)res);
+                    swprintf(errBuf, L"Install error: %d — %S", (int)res, err.c_str());
                     PostMessageW(hwnd, WM_INSTALL_ERROR, 0, (LPARAM)errBuf);
                 }
             }).detach();
             return TRUE;
         }
 
-        if (id == 4) { // Играть
+        if (id == 4) {
             if (!g_modInstalled) {
-                MessageBoxW(hwnd, L"Сначала установите мод.", L"Ошибка", MB_ICONERROR);
+                MessageBoxW(hwnd, L"Install the mod first.", L"Error", MB_ICONERROR);
                 return TRUE;
             }
 
-            // Читаем имя игрока и адрес сервера
             wchar_t playerName[64], serverAddr[128];
             GetDlgItemTextW(hwnd, 103, playerName, 64);
             GetDlgItemTextW(hwnd, 104, serverAddr, 128);
 
             if (wcslen(playerName) < 1) {
-                MessageBoxW(hwnd, L"Введите имя игрока.", L"Ошибка", MB_ICONWARNING);
+                MessageBoxW(hwnd, L"Enter your player name.", L"Error", MB_ICONWARNING);
                 return TRUE;
             }
             if (wcslen(serverAddr) < 1) {
-                MessageBoxW(hwnd, L"Введите адрес сервера (IP:Port).", L"Ошибка", MB_ICONWARNING);
+                MessageBoxW(hwnd, L"Enter server address (IP:Port).", L"Error", MB_ICONWARNING);
                 return TRUE;
             }
 
-            SetStatus(hwnd, L"Запуск Kenshi...");
+            SetStatus(hwnd, L"Starting Kenshi...");
             EnableWindow(g_hPlayBtn, FALSE);
             EnableWindow(g_hInstallBtn, FALSE);
 
-            // Сохраняем параметры в settings.txt для передачи в игру
             std::wstring settingsPath = g_kenshiPath + L"\\data\\config\\KenshiMP_Client.cfg";
             FILE* f = _wfopen(settingsPath.c_str(), L"w, ccs=UTF-8");
             if (f) {
@@ -155,14 +233,12 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 fclose(f);
             }
 
-            // Запускаем Kenshi
             std::wstring kenshiExe = g_kenshiPath + L"\\kenshi_x64.exe";
             if (GetFileAttributesW(kenshiExe.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                MessageBoxW(hwnd, L"kenshi_x64.exe не найден.", L"Ошибка", MB_ICONERROR);
+                MessageBoxW(hwnd, L"kenshi_x64.exe not found.", L"Error", MB_ICONERROR);
                 return TRUE;
             }
 
-            // Запускаем через KenshiMP.Injector если есть, иначе напрямую
             std::wstring injectorPath = g_kenshiPath + L"\\KenshiMP.Injector.exe";
             std::wstring cmd;
             if (GetFileAttributesW(injectorPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
@@ -177,8 +253,8 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (!CreateProcessW(cmd.c_str(), nullptr, nullptr, nullptr,
                     FALSE, CREATE_DEFAULT_ERROR_MODE, nullptr,
                     g_kenshiPath.c_str(), &si, &pi)) {
-                MessageBoxW(hwnd, L"Не удалось запустить игру.", L"Ошибка", MB_ICONERROR);
-                SetStatus(hwnd, L"Ошибка запуска");
+                MessageBoxW(hwnd, L"Failed to start game.", L"Error", MB_ICONERROR);
+                SetStatus(hwnd, L"Start failed");
                 EnableWindow(g_hPlayBtn, TRUE);
                 EnableWindow(g_hInstallBtn, TRUE);
                 return TRUE;
@@ -186,11 +262,11 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
-            SetStatus(hwnd, L"Kenshi запускается...");
+            SetStatus(hwnd, L"Kenshi is starting...");
             return TRUE;
         }
 
-        if (id == 5) { // Выход
+        if (id == 5) {
             EndDialog(hwnd, 0);
             return TRUE;
         }
@@ -198,22 +274,22 @@ static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_INSTALL_COMPLETE:
-        SetStatus(hwnd, L"[✓] Kenshi-Online мод установлен!");
+        SetStatus(hwnd, L"[OK] Kenshi-Online mod installed!");
         SetProgress(hwnd, 100);
         EnableWindow(g_hInstallBtn, FALSE);
         EnableWindow(g_hPlayBtn, TRUE);
         g_modInstalled = true;
         MessageBoxW(hwnd,
-            L"Мод установлен!\n\nВведите адрес сервера (IP:Port от хоста) и нажмите 'Играть'.",
-            L"Установка завершена", MB_ICONINFORMATION);
+            L"Mod installed!\n\nEnter the server address (IP:Port from the host) and click 'Play'.",
+            L"Install Complete", MB_ICONINFORMATION);
         return TRUE;
 
     case WM_INSTALL_ERROR: {
         const wchar_t* err = (const wchar_t*)lParam;
         wchar_t msg[512];
-        swprintf(msg, L"Ошибка: %s\n\nПроверьте интернет-соединение и перезапустите лаунчер.", err);
-        MessageBoxW(hwnd, msg, L"Ошибка", MB_ICONERROR);
-        SetStatus(hwnd, L"Ошибка установки");
+        swprintf(msg, L"Error: %s\n\nCheck your internet connection and restart the launcher.", err);
+        MessageBoxW(hwnd, msg, L"Error", MB_ICONERROR);
+        SetStatus(hwnd, L"Install failed");
         SetProgress(hwnd, 0);
         EnableWindow(g_hInstallBtn, TRUE);
         return TRUE;
