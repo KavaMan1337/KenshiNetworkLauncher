@@ -9,5 +9,5 @@ add_library(LauncherCommon STATIC
 )
 
 target_include_directories(LauncherCommon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(LauncherCommon PUBLIC ${WINDOWS_LIBS} winhttp shlwapi)
+target_link_libraries(LauncherCommon PUBLIC ${WINDOWS_LIBS} winhttp shlwapi ole32 comctl32 iphlpapi ws2_32 uuid)
 target_compile_definitions(LauncherCommon PRIVATE _UNICODE UNICODE)

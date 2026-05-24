@@ -1,24 +1,19 @@
 #include <windows.h>
+#include <commctrl.h>
+#include <objbase.h>
+
 #include "HostWindow.h"
 
-INT_PTR WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
-                        LPWSTR lpCmdLine, INT nCmdShow) {
+#pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "ole32.lib")
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+                    LPWSTR lpCmdLine, int nCmdShow) {
     (void)hPrevInstance;
     (void)lpCmdLine;
     (void)nCmdShow;
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-
-    // Регистрируем класс главного окна
-    WNDCLASSEXW wc = {};
-    wc.cbSize = sizeof(wc);
-    wc.lpfnWndProc = DefDlgProc;
-    wc.hInstance = hInstance;
-    wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    wc.lpszClassName = L"KenshiHostWindow";
-    RegisterClassExW(&wc);
-
     InitCommonControls();
 
     int ret = RunHostWindow(hInstance);

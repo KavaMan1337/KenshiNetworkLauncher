@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <string>
+#include <functional>
 
 // Колбэки для обновления UI из рабочих потоков
 struct ClientWindowCallbacks {
