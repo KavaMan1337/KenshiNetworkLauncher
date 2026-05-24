@@ -6,8 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
-add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8 /EHsc>)
-add_compile_options($<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra>)
+add_compile_options(/utf-8 /EHsc)
 
 find_package(OpenSSL QUIET)
 
