@@ -14,6 +14,9 @@ using namespace LauncherCommon;
 #ifndef PBM_SETPOS
 #define PBM_SETPOS 0x0402
 #endif
+#ifndef MAKEPARAM
+#define MAKEPARAM(a, b) ((LPARAM)MAKELONG(a, b))
+#endif
 
 static HWND g_hwnd = nullptr;
 static HWND g_hProgress = nullptr;
