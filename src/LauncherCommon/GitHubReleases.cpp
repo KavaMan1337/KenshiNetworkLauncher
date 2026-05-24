@@ -182,7 +182,7 @@ static bool ExtractZip(const wchar_t* zipPath, const wchar_t* destDir) {
     return system(cmd.c_str()) == 0;
 }
 
-std::wstring DownloadAndExtract(const std::string& url, const wchar_t* destDir) {
+std::wstring DownloadAndExtract(const std::string& url, const std::wstring& destDir) {
     std::wstring tmpDir = GetTmpDir();
     CreateDirectoryW(tmpDir.c_str(), nullptr);
     std::wstring zipPath = tmpDir + L"\\release.zip";
