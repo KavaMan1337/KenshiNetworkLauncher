@@ -1,9 +1,19 @@
 #include "ClientWindow.h"
 #include "../LauncherCommon/LauncherCommon.h"
+#include <windows.h>
+#include <commctrl.h>
 #include <string>
 #include <thread>
+#include <vector>
+#include <cstdio>
+
+using namespace LauncherCommon;
 
 #pragma comment(lib, "comctl32.lib")
+
+#ifndef PBM_SETPOS
+#define PBM_SETPOS 0x0402
+#endif
 
 static HWND g_hwnd = nullptr;
 static HWND g_hProgress = nullptr;

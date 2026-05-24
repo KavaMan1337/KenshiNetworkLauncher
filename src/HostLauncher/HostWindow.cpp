@@ -8,11 +8,25 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
-#include <functional>
 #include <memory>
-#include <algorithm>
+
+using namespace LauncherCommon;
 
 #pragma comment(lib, "comctl32.lib")
+
+// Macro compatibility wrappers
+#ifndef Button_SetCheck
+#define Button_SetCheck(hwnd, state) ((void)SendMessageW((hwnd), BM_SETCHECK, (WPARAM)(state), 0))
+#endif
+#ifndef Button_GetCheck
+#define Button_GetCheck(hwnd) ((int)(DWORD)(WORD)SendMessageW((hwnd), BM_GETCHECK, 0, 0))
+#endif
+#ifndef PBM_SETPOS
+#define PBM_SETPOS 0x0402
+#endif
+#ifndef MAKEPARAM
+#define MAKEPARAM(a, b) ((LPARAM)MAKELONG(a, b))
+#endif
 
 // Структура конфигурации сервера
 struct ServerConfig {
